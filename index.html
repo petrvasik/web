@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulátor práce kompresoru | Indikátorový diagram (p-V)</title>
+  <style>
+    :root {
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --border: #e2e8f0;
+      --border-dark: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --phase-a: #d97706; /* Expanze - jantarová */
+      --phase-b: #0284c7; /* Sání - modrá */
+      --phase-c: #7c3aed; /* Komprese - fialová */
+      --phase-d: #dc2626; /* Výtlak - červená */
+      --sp-color: #ea580c;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      padding: 10px 14px 60px;
+      line-height: 1.35;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    sub {
+      font-size: 0.75em;
+      line-height: 0;
+      position: relative;
+      vertical-align: baseline;
+      bottom: -0.25em;
+    }
+
+    /* Main Dashboard Layout */
+    .dashboard-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 12px;
+      flex: 1;
+      align-items: stretch;
+    }
+
+    @media (max-width: 800px) {
+      .dashboard-layout {
+        grid-template-columns: 1fr;
+      }
+      .right-col {
+        height: auto !important;
+      }
+      .right-col .control-card {
+        flex: initial !important;
+      }
+    }
+
+    /* Left Column */
+    .left-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+    }
+
+    /* Phase Banner */
+    .phase-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    }
+
+    .phase-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .phase-badge {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--phase-a);
+      flex-shrink: 0;
+    }
+
+    .phase-title {
+      font-weight: 700;
+      font-size: 0.94rem;
+    }
+
+    .phase-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .valve-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .valve-tag {
+      font-size: 0.75rem;
+      padding: 2px 7px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .valve-tag.open {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+      color: #065f46;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 8px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+
+    .metric-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 1px;
+    }
+
+    .metric-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .metric-unit {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-left: 2px;
+    }
+
+    .metric-sub {
+      font-size: 0.68rem;
+      color: #0284c7;
+      margin-top: 1px;
+    }
+
+    /* Visualizer Card */
+    .visualizer-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1000 / 510;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+
+    .visualizer-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 0.75rem;
+      margin-top: 8px;
+      color: var(--text-muted);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend-box {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+    }
+
+    /* Right Column: Zarovnaný s levou stranou */
+    .right-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      justify-content: space-between;
+    }
+
+    .header-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      flex: 0 0 auto;
+    }
+
+    .header-card h1 {
+      font-size: 1.08rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      align-items: flex-start;
+    }
+
+    .header-card .badge {
+      font-size: 0.72rem;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .control-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .control-card-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Modul řízení cyklu: tlačítka vyplňují celý prostor karty */
+    .control-card-actions {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .control-card-actions .btn-row-main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: stretch;
+      min-height: 52px;
+    }
+
+    .control-card-actions .btn {
+      height: 100%;
+      font-size: 0.95rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .control-card-actions .btn span:first-child {
+      font-size: 1.15rem;
+    }
+
+    .btn {
+      cursor: pointer;
+      border: 1px solid var(--border-dark);
+      background: #ffffff;
+      color: var(--text-main);
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .btn:hover {
+      background: #f1f5f9;
+    }
+
+    /* Sjednocené tlačítko Start / Stop */
+    .btn-toggle.state-start {
+      background: #16a34a;
+      border-color: #15803d;
+      color: #ffffff;
+    }
+    .btn-toggle.state-start:hover {
+      background: #15803d;
+    }
+
+    .btn-toggle.state-stop {
+      background: #dc2626;
+      border-color: #b91c1c;
+      color: #ffffff;
+    }
+    .btn-toggle.state-stop:hover {
+      background: #b91c1c;
+    }
+
+    .control-row {
+      margin-bottom: 8px;
+    }
+    .control-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+
+    .control-val {
+      color: #0284c7;
+      font-family: monospace;
+      font-weight: 700;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 5px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #0284c7;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+
+    @media (min-width: 801px) and (min-height: 620px) {
+      body { height: 100vh; min-height: 0; overflow: hidden; padding: 8px 12px; }
+      .dashboard-layout { min-height: 0; }
+      .left-col, .right-col { min-height: 0; }
+      .left-col { gap: 8px; }
+      .right-col { gap: 8px; justify-content: flex-start; }
+      .right-col .header-card { padding: 8px 12px; }
+      .right-col .header-card h1 { font-size: 1rem; gap: 3px; }
+      .right-col .control-card { flex: 1 1 0; min-height: 0; padding: 8px 11px; }
+      .right-col .control-card-actions { flex: 0.75 1 0; justify-content: space-between; }
+      .right-col .compressor-params-card { flex: 1.25 1 0; justify-content: space-between; }
+      .control-card-actions .btn-row-main { flex: 0 0 auto; min-height: 42px; gap: 8px; }
+      .control-card-actions > .control-row { margin-top: 7px; }
+      .control-card-actions .btn { padding: 6px 10px; font-size: 0.88rem; border-radius: 7px; }
+      .control-card-actions .btn span:first-child { font-size: 1rem; }
+      .right-col .control-row { margin-bottom: 5px; }
+      .compressor-params-card .control-row { margin-bottom: 8px; }
+      .control-card-title { margin-bottom: 6px; padding-bottom: 3px; }
+      .control-row { margin-bottom: 6px; }
+      .visualizer-card { min-height: 0; padding: 8px; }
+      .visualizer-legend { gap: 6px 10px; margin-top: 5px; font-size: 0.69rem; }
+      .metrics-grid { gap: 6px; }
+      .metric-card { padding: 5px 8px; }
+      .metric-value { font-size: 1.05rem; }
+      .phase-bar { padding: 6px 11px; }
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Main 2-Column Dashboard Layout -->
+  <div class="dashboard-layout">
+    
+    <!-- LEFT COLUMN: Phase Banner -> Telemetry -> Canvas Visualizer -->
+    <div class="left-col">
+      
+      <!-- Phase Banner -->
+      <div class="phase-bar">
+        <div class="phase-info">
+          <div class="phase-badge" id="phase-badge"></div>
+          <div>
+            <div class="phase-title" id="phase-title">Fáze A: Expanze ze ŠP</div>
+            <div class="phase-desc" id="phase-desc">Píst klesá z HÚ. Chladivo ze ŠP expanduje pod p₀ k překonání pružiny ventilu.</div>
+          </div>
+        </div>
+        <div class="valve-group">
+          <div class="valve-tag" id="tag-suction">Sací ventil: <span id="status-suction">Zavřen</span></div>
+          <div class="valve-tag" id="tag-discharge">Výtlačný ventil: <span id="status-discharge">Zavřen</span></div>
+        </div>
+      </div>
+
+      <!-- Telemetry Cards -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Okamžitý tlak p(t)</div>
+          <div class="metric-value"><span id="val-p">2.00</span><span class="metric-unit">bar(a)</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Okamžitý objem V(t)</div>
+          <div class="metric-value"><span id="val-v">7.5</span><span class="metric-unit">cm³</span></div>
+          <div class="metric-sub" id="val-v-sub">Válcový prostor</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Objemová účinnost λᵥ</div>
+          <div class="metric-value"><span id="val-lambda">83.5</span><span class="metric-unit">%</span></div>
+          <div class="metric-sub">Ideální odhad ze ŠP a tlakového poměru</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Tlakový poměr Π</div>
+          <div class="metric-value"><span id="val-pi">6.00</span><span class="metric-unit">-</span></div>
+          <div class="metric-sub">p<sub>k</sub> / p₀</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Indikovaná práce Wᵢ</div>
+          <div class="metric-value"><span id="val-work">54.2</span><span class="metric-unit">J</span></div>
+          <div class="metric-sub">Práce dodaná za cyklus na válec</div>
+        </div>
+      </div>
+
+      <!-- Unified Canvas Visualizer -->
+      <div class="visualizer-card">
+        <div class="canvas-wrapper">
+          <canvas id="main-canvas"></canvas>
+        </div>
+        <div class="visualizer-legend">
+          <div class="legend-item"><span class="legend-box" style="background:var(--sp-color);"></span> ŠP (Škodlivý prostor)</div>
+          <div class="legend-item"><span class="legend-box" style="background:#64748b;"></span> HÚ (horní úvrať) / DÚ (dolní úvrať)</div>
+          <div class="legend-item"><span class="legend-box" style="background:var(--phase-a);"></span> Křivka A - Expanze</div>
+          <div class="legend-item"><span class="legend-box" style="background:var(--phase-b);"></span> Křivka B - Sání (p₀)</div>
+          <div class="legend-item"><span class="legend-box" style="background:var(--phase-c);"></span> Křivka C - Komprese</div>
+          <div class="legend-item"><span class="legend-box" style="background:var(--phase-d);"></span><span>Křivka D – Výtlak (p<sub>k</sub>)</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+      
+      <!-- Záhlaví -->
+      <div class="header-card">
+        <h1>
+          Simulátor práce kompresoru
+          <span class="badge">Indikátorový diagram (p-V)</span>
+        </h1>
+      </div>
+
+      <!-- Řízení cyklu -->
+      <div class="control-card control-card-actions">
+        <div class="control-card-title">Řízení cyklu</div>
+        <div class="btn-row-main">
+          <button class="btn btn-toggle state-start" id="btn-toggle">
+            <span id="toggle-icon">▶</span> <span id="toggle-text">Start</span>
+          </button>
+          <button class="btn" id="btn-reset-all" title="Vrátí všechny parametry i píst na základní hodnoty">
+            <span>🔄</span> Reset simulace
+          </button>
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>Rychlost animace</span>
+            <span class="control-val" id="badge-rpm">15 RPM</span>
+          </div>
+          <input type="range" id="slider-rpm" min="1" max="150" step="1" value="15">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>Úhel kliky (poloha pístu)</span>
+            <span class="control-val" id="badge-angle">0°</span>
+          </div>
+          <input type="range" id="slider-angle" min="0" max="360" step="1" value="0">
+        </div>
+      </div>
+
+      <div class="control-card compressor-params-card">
+        <div class="control-card-title">Provozní parametry kompresoru</div>
+        <div class="control-row">
+          <div class="control-header"><label for="select-diagram">Diagram</label></div>
+          <select id="select-diagram" style="width:100%;padding:7px;border:1px solid var(--border-dark);border-radius:6px;background:white;color:var(--text-main)">
+            <option value="real">Zjednodušený reálný model</option>
+            <option value="theoretical">Teoretický diagram</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <div class="control-header"><label for="slider-n">Polytropický exponent n</label><span class="control-val" id="badge-n">1.25</span></div>
+          <input type="range" id="slider-n" min="1.05" max="1.40" step="0.01" value="1.25">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>Sací tlak p<sub>0</sub> (absolutní)</span>
+            <span class="control-val" id="badge-p0">2.0 bar(a)</span>
+          </div>
+          <input type="range" id="slider-p0" min="0.8" max="5.0" step="0.1" value="2.0">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>Výtlačný tlak p<sub>k</sub> (absolutní)</span>
+            <span class="control-val" id="badge-pk">12.0 bar(a)</span>
+          </div>
+          <input type="range" id="slider-pk" min="6.0" max="25.0" step="0.5" value="12.0">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>Škodlivý prostor ŠP</span>
+            <span class="control-val" id="badge-sp">5.0 %</span>
+          </div>
+          <input type="range" id="slider-sp" min="1.0" max="15.0" step="0.5" value="5.0">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>Zdvihový objem V<sub>z</sub></span>
+            <span class="control-val" id="badge-vz">150 cm³</span>
+          </div>
+          <input type="range" id="slider-vz" min="50" max="400" step="10" value="150">
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Poměr poloměru kliky k délce ojnice (r/L); používá se pro výpočet i kresbu.
+    const CRANK_ROD_RATIO = 0.28;
+
+    // State
+    const state = {
+      running: false,
+      rpm: 15,
+      angle: 0,
+      p0: 2.0,
+      pk: 12.0,
+      sp_pct: 5.0,
+      vz: 150,
+      n: 1.25,
+      diagramMode: 'real',
+      lastTimestamp: 0
+    };
+
+    // DOM Elements
+    const btnToggle = document.getElementById('btn-toggle');
+    const toggleIcon = document.getElementById('toggle-icon');
+    const toggleText = document.getElementById('toggle-text');
+    const btnResetAll = document.getElementById('btn-reset-all');
+
+    const sliderRpm = document.getElementById('slider-rpm');
+    const badgeRpm = document.getElementById('badge-rpm');
+    const sliderAngle = document.getElementById('slider-angle');
+    const badgeAngle = document.getElementById('badge-angle');
+
+    const sliderN = document.getElementById('slider-n');
+    const badgeN = document.getElementById('badge-n');
+    const selectDiagram = document.getElementById('select-diagram');
+    const sliderP0 = document.getElementById('slider-p0');
+    const badgeP0 = document.getElementById('badge-p0');
+    const sliderPk = document.getElementById('slider-pk');
+    const badgePk = document.getElementById('badge-pk');
+
+    const sliderSp = document.getElementById('slider-sp');
+    const badgeSp = document.getElementById('badge-sp');
+    const sliderVz = document.getElementById('slider-vz');
+    const badgeVz = document.getElementById('badge-vz');
+
+    const phaseBadge = document.getElementById('phase-badge');
+    const phaseTitle = document.getElementById('phase-title');
+    const phaseDesc = document.getElementById('phase-desc');
+
+    const tagSuction = document.getElementById('tag-suction');
+    const statusSuction = document.getElementById('status-suction');
+    const tagDischarge = document.getElementById('tag-discharge');
+    const statusDischarge = document.getElementById('status-discharge');
+
+    const valP = document.getElementById('val-p');
+    const valV = document.getElementById('val-v');
+    const valLambda = document.getElementById('val-lambda');
+    const valPi = document.getElementById('val-pi');
+    const valWork = document.getElementById('val-work');
+
+    const canvas = document.getElementById('main-canvas');
+    const ctx = canvas.getContext('2d');
+    let diagramTransform = null;
+    let crankControl = null;
+    let plotGeometry = null;
+    let phase4ArcCache = null;
+    let draggingDiagramPoint = false;
+    let draggingCrankPin = false;
+    let dragLastPointer = null;
+    let dragTargetPoint = null;
+
+    function updateToggleButton() {
+      if (state.running) {
+        btnToggle.classList.remove('state-start');
+        btnToggle.classList.add('state-stop');
+        toggleIcon.textContent = '⏸';
+        toggleText.textContent = 'Stop';
+      } else {
+        btnToggle.classList.remove('state-stop');
+        btnToggle.classList.add('state-start');
+        toggleIcon.textContent = '▶';
+        toggleText.textContent = 'Start';
+      }
+    }
+
+    // Kinematika pístu a geometrie
+    function getKinematics(angleDeg) {
+      const rad = (angleDeg * Math.PI) / 180;
+      const crankRadiusRatio = 0.5; // poloměr kliky / zdvih
+      const rodLengthRatio = crankRadiusRatio / CRANK_ROD_RATIO;
+      const crankOffset = crankRadiusRatio * Math.sin(rad);
+      const s = crankRadiusRatio * (1 - Math.cos(rad))
+        + rodLengthRatio - Math.sqrt(rodLengthRatio ** 2 - crankOffset ** 2);
+      const V_c = (state.sp_pct / 100) * state.vz; // Krok 1: V_c (škodlivý prostor)
+      const V_current = V_c + s * state.vz;
+      const V_max = V_c + state.vz;               // Krok 1: V_max (celkový objem v DÚ)
+      return { s, V_current, V_c, V_max, rad };
+    }
+
+    // Hranice otevření ventilů vycházejí z polytropického děje v uzavřeném válci.
+    // Reálný režim přidává malou tlakovou ztrátu a krátké tlumené zákmity.
+    function getCycleParams() {
+      const V_c = (state.sp_pct / 100) * state.vz;
+      const V_max = V_c + state.vz;
+      const n = state.n;
+      const real = state.diagramMode === 'real';
+      const ztrata = real ? 0.08 : 0;
+      const prekmit = real ? Math.min(0.35, Math.max(0.12, (state.pk - state.p0) * 0.018)) : 0;
+      const p_suc_dip = Math.max(0.1, state.p0 - ztrata - prekmit);
+      const p_dis_peak = state.pk + ztrata + prekmit;
+      const p_suction_end = Math.max(0.1, Math.min(state.p0, state.p0 - ztrata + prekmit * Math.exp(-7)));
+      const p_discharge_end = Math.max(state.pk, state.pk + ztrata - prekmit * Math.exp(-7));
+      const V_exp_required = V_c * Math.pow(p_discharge_end / p_suc_dip, 1 / n);
+      const V_comp_required = V_max * Math.pow(p_suction_end / p_dis_peak, 1 / n);
+      const tolerance = 1e-9 * V_max;
+      const reachable = V_exp_required < V_max - tolerance && V_comp_required > V_c + tolerance;
+      const V_exp_end = Math.min(V_max, V_exp_required);
+      const V_comp_end = Math.max(V_c, V_comp_required);
+      return { V_c, V_max, n, ztrata, prekmit, p_suc_dip, p_suc_end: p_suction_end,
+        p_dis_peak, p_dis_end: p_discharge_end, V_exp_end, V_comp_end, reachable, real };
+    }
+
+    function evalPhase1(V, params) { return params.p_dis_end * Math.pow(params.V_c / Math.max(V, params.V_c), params.n); }
+    function evalPhase2(V, params) {
+      const t = Math.min(1, Math.max(0, (V - params.V_exp_end) / Math.max(1e-9, params.V_max - params.V_exp_end)));
+      const osc = params.real ? params.prekmit * Math.cos(t * Math.PI * 5) * Math.exp(-t * 7) : 0;
+      return Math.max(0.1, Math.min(state.p0, state.p0 - params.ztrata - osc));
+    }
+    function evalPhase3(V, params) { return params.p_suc_end * Math.pow(params.V_max / Math.max(V, params.V_c), params.n); }
+    function evalPhase4(V, params) {
+      const t = Math.min(1, Math.max(0, (params.V_comp_end - V) / Math.max(1e-9, params.V_comp_end - params.V_c)));
+      const osc = params.real ? params.prekmit * Math.cos(t * Math.PI * 5) * Math.exp(-t * 7) : 0;
+      return Math.max(state.pk, state.pk + params.ztrata + osc);
+    }
+
+    // Délku fáze výtlaku počítáme v souřadnicích skutečného grafu, aby 70 %
+    // odpovídalo vzdálenosti po vykreslené křivce, nikoli jen změně objemu.
+    function getPhase4ArcData(params) {
+      if (!plotGeometry) return null;
+      const key = [params.V_c, params.V_comp_end, state.pk, params.ztrata,
+        params.prekmit, params.real, plotGeometry.scaleX, plotGeometry.scaleY].join('|');
+      if (phase4ArcCache?.key === key) return phase4ArcCache;
+
+      const points = [];
+      const steps = 160;
+      for (let i = 0; i <= steps; i++) {
+        const v = params.V_comp_end + (i / steps) * (params.V_c - params.V_comp_end);
+        points.push({ v, x: v * plotGeometry.scaleX, y: evalPhase4(v, params) * plotGeometry.scaleY });
+      }
+      const cumulative = [0];
+      for (let i = 1; i < points.length; i++) {
+        const dx = points[i].x - points[i - 1].x;
+        const dy = points[i].y - points[i - 1].y;
+        cumulative.push(cumulative[i - 1] + Math.hypot(dx, dy));
+      }
+      phase4ArcCache = { key, points, cumulative, total: cumulative[cumulative.length - 1] };
+      return phase4ArcCache;
+    }
+
+    function getPhase4ArcProgress(V, params) {
+      const arc = getPhase4ArcData(params);
+      if (!arc || arc.total <= 0) {
+        return Math.min(1, Math.max(0,
+          (params.V_comp_end - V) / Math.max(1e-9, params.V_comp_end - params.V_c)));
+      }
+      for (let i = 1; i < arc.points.length; i++) {
+        const previous = arc.points[i - 1];
+        const next = arc.points[i];
+        if (V >= next.v && V <= previous.v) {
+          const t = (previous.v - V) / Math.max(1e-9, previous.v - next.v);
+          const dx = (next.x - previous.x) * t;
+          const pressureY = evalPhase4(V, params) * plotGeometry.scaleY;
+          const dy = pressureY - previous.y;
+          const partial = Math.hypot(dx, dy);
+          return Math.min(1, (arc.cumulative[i - 1] + partial) / arc.total);
+        }
+      }
+      return V <= params.V_c ? 1 : 0;
+    }
+
+    // Okamžitý stav cyklu pro daný úhel kliky
+    function getCycleState(angleDeg) {
+      angleDeg = ((angleDeg % 360) + 360) % 360;
+      const { s, V_current, V_c, V_max, rad } = getKinematics(angleDeg);
+      const params = getCycleParams();
+
+      if (!params.reachable) {
+        return { phase: 'X', pressure: null, V_current, V_sp: V_c, V_max,
+          V_exp_end: params.V_exp_end, V_comp_end: params.V_comp_end, s, rad,
+          suctionOpen: false, dischargeOpen: false };
+      }
+
+      let phase = 'A';
+      let pressure = state.p0;
+      let suctionOpen = false;
+      let dischargeOpen = false;
+
+      if (angleDeg < 180) {
+        // Píst jde dolů (HÚ -> DÚ)
+        if (V_current < params.V_exp_end) {
+          // 1. FÁZE: Expanze ze ŠP
+          phase = 'A';
+          suctionOpen = false;
+          dischargeOpen = false;
+          pressure = evalPhase1(V_current, params);
+        } else {
+          // 2. FÁZE: Sání
+          phase = 'B';
+          suctionOpen = true;
+          dischargeOpen = false;
+          pressure = evalPhase2(V_current, params);
+        }
+      } else {
+        // Píst jde nahoru (DÚ -> HÚ)
+        if (V_current > params.V_comp_end) {
+          // 3. FÁZE: Komprese
+          phase = 'C';
+          suctionOpen = false;
+          dischargeOpen = false;
+          pressure = evalPhase3(V_current, params);
+        } else {
+          // 4. FÁZE: Výtlak
+          phase = 'D';
+          suctionOpen = false;
+          dischargeOpen = getPhase4ArcProgress(V_current, params) < 0.70;
+          pressure = evalPhase4(V_current, params);
+        }
+      }
+
+      return {
+        phase,
+        pressure,
+        V_current,
+        V_sp: V_c,
+        V_max,
+        V_exp_end: params.V_exp_end,
+        V_comp_end: params.V_comp_end,
+        s,
+        rad,
+        suctionOpen,
+        dischargeOpen
+      };
+    }
+
+    // Výpočet metriky a indikované práce
+    function computeMetrics() {
+      const Pi = state.pk / state.p0;
+      const c = state.sp_pct / 100;
+      const n = state.n;
+      const lambda_v = Math.max(0, 1 - c * (Math.pow(Pi, 1 / n) - 1));
+      if (!getCycleParams().reachable) return { lambda_v: null, workJ: null, Pi };
+
+      let workJ = 0;
+      let prev = getCycleState(0);
+      for (let i = 1; i <= 360; i++) {
+        const cur = getCycleState(i % 360);
+        const dV_m3 = (cur.V_current - prev.V_current) * 1e-6;
+        const p_avg_pa = ((cur.pressure + prev.pressure) / 2) * 1e5;
+        workJ += -p_avg_pa * dV_m3;
+        prev = cur;
+      }
+
+      return {
+        lambda_v: lambda_v * 100,
+        workJ: Math.abs(workJ),
+        Pi
+      };
+    }
+
+    // Vykreslení celé scény
+    function render() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+
+      const diagramPadL = w * 0.45 + 44;
+      const diagramPadR = w - 24;
+      const diagramPadT = h * 0.12;
+      const diagramPadB = h * 0.84;
+      const currentVc = (state.sp_pct / 100) * state.vz;
+      const currentVmax = currentVc + state.vz;
+      plotGeometry = {
+        scaleX: (diagramPadR - diagramPadL) / (currentVmax * 1.12),
+        scaleY: (diagramPadB - diagramPadT) / (state.pk * 1.30)
+      };
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+
+      const cur = getCycleState(state.angle);
+      const params = getCycleParams();
+
+      // Souřadnice
+      const cylW = w * 0.36;
+      const diagX = w * 0.45;
+
+      // 1. VÁLEC KOMPRESORU (Vlevo)
+      const cx = cylW * 0.44;
+      const cylTop = h * 0.16;
+      const boreW = cylW * 0.46;
+      const leftX = cx - boreW / 2;
+      const rightX = cx + boreW / 2;
+
+      const strokeH = h * 0.22;
+      const spH = (state.sp_pct / 100) * strokeH;
+      const huY = cylTop + spH;
+      const duY = huY + strokeH;
+      const pistonH = h * 0.09;
+      const pistonY = huY + cur.s * strokeH;
+
+      // Žebra
+      ctx.fillStyle = '#f1f5f9';
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1.5;
+      for (let y = cylTop + 14; y <= duY + pistonH - 10; y += 16) {
+        ctx.fillRect(leftX - 14, y, 14, 5);
+        ctx.strokeRect(leftX - 14, y, 14, 5);
+        ctx.fillRect(rightX, y, 14, 5);
+        ctx.strokeRect(rightX, y, 14, 5);
+      }
+
+      // Tlakový gradient v komoře
+      const pNorm = Number.isFinite(cur.pressure)
+        ? Math.min(1, Math.max(0, (cur.pressure - state.p0) / (state.pk - state.p0 + 0.1)))
+        : 0;
+      const r = Math.round(180 + pNorm * 65);
+      const g = Math.round(225 - pNorm * 130);
+      const b = Math.round(250 - pNorm * 200);
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.35 + pNorm * 0.45})`;
+      ctx.fillRect(leftX, cylTop, boreW, pistonY - cylTop);
+
+      // Stěny
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(leftX, cylTop - 6);
+      ctx.lineTo(leftX, duY + pistonH + 18);
+      ctx.moveTo(rightX, cylTop - 6);
+      ctx.lineTo(rightX, duY + pistonH + 18);
+      ctx.stroke();
+
+      // Hlava válce
+      ctx.fillStyle = '#e2e8f0';
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(leftX - 18, cylTop - 24, boreW + 36, 24);
+      ctx.fillRect(leftX - 18, cylTop - 24, boreW + 36, 24);
+
+      // Kanály nad hlavou
+      const sucX = cx - boreW * 0.24;
+      const disX = cx + boreW * 0.24;
+
+      ctx.fillStyle = '#f1f5f9';
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      ctx.fillRect(sucX - 10, cylTop - 42, 20, 20);
+      ctx.strokeRect(sucX - 10, cylTop - 42, 20, 20);
+      ctx.fillRect(disX - 10, cylTop - 42, 20, 20);
+      ctx.strokeRect(disX - 10, cylTop - 42, 20, 20);
+
+      // Sací ventil
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(sucX - 10, cylTop - 24, 20, 24);
+      const sucLift = cur.suctionOpen ? 8 : 0;
+      ctx.strokeStyle = cur.suctionOpen ? '#16a34a' : '#64748b';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(sucX - 12, cylTop);
+      ctx.lineTo(sucX + 12, cylTop + sucLift);
+      ctx.stroke();
+
+      // Výtlačný ventil
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(disX - 10, cylTop - 24, 20, 24);
+      const disLift = cur.dischargeOpen ? 8 : 0;
+      ctx.strokeStyle = cur.dischargeOpen ? '#dc2626' : '#64748b';
+      ctx.beginPath();
+      ctx.moveTo(disX - 12, cylTop - disLift);
+      ctx.lineTo(disX + 12, cylTop);
+      ctx.stroke();
+
+      // Šipka proudění DOVNITŘ (při sání)
+      if (cur.suctionOpen) {
+        ctx.fillStyle = '#0284c7';
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2;
+
+        const arrowTopY = cylTop - 50;
+        const arrowTipY = cylTop + 14;
+
+        ctx.beginPath();
+        ctx.moveTo(sucX, arrowTopY);
+        ctx.lineTo(sucX, arrowTipY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(sucX, arrowTipY + 4);
+        ctx.lineTo(sucX - 6, arrowTipY - 5);
+        ctx.lineTo(sucX + 6, arrowTipY - 5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.font = 'bold 10px system-ui';
+        ctx.fillText('↓ Dovnitř (sání)', sucX - 35, arrowTopY - 4);
+      }
+
+      // Šipka proudění VEN (při výtlaku)
+      if (cur.dischargeOpen) {
+        ctx.fillStyle = '#dc2626';
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 2;
+
+        const arrowBaseY = cylTop + 8;
+        const arrowTipY = cylTop - 46;
+
+        ctx.beginPath();
+        ctx.moveTo(disX, arrowBaseY);
+        ctx.lineTo(disX, arrowTipY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(disX, arrowTipY - 4);
+        ctx.lineTo(disX - 6, arrowTipY + 5);
+        ctx.lineTo(disX + 6, arrowTipY + 5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.font = 'bold 10px system-ui';
+        ctx.fillText('↑ Ven (výtlak)', disX - 30, arrowTipY - 8);
+      }
+
+      // ŠP - škodlivý prostor
+      ctx.fillStyle = 'rgba(234, 88, 12, 0.2)';
+      ctx.fillRect(leftX, cylTop, boreW, spH);
+      ctx.strokeStyle = '#ea580c';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(leftX, cylTop, boreW, spH);
+      ctx.setLineDash([]);
+
+      // Píst
+      ctx.fillStyle = '#94a3b8';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.fillRect(leftX + 2, pistonY, boreW - 4, pistonH);
+      ctx.strokeRect(leftX + 2, pistonY, boreW - 4, pistonH);
+
+      // Pístní čep
+      const pinX = cx;
+      const pinY = pistonY + pistonH * 0.45;
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.arc(pinX, pinY, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Klika a ojnice
+      const crankR = strokeH / 2;
+      const crankRodLength = crankR / CRANK_ROD_RATIO;
+      const crankY = huY + pistonH * 0.45 + crankRodLength + crankR;
+      const crankPinX = cx + crankR * Math.sin(cur.rad);
+      const crankPinY = crankY - crankR * Math.cos(cur.rad);
+      crankControl = { cx, crankY, crankR, x: crankPinX, y: crankPinY };
+
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(pinX, pinY);
+      ctx.lineTo(crankPinX, crankPinY);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, crankY, crankR + 8, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#0284c7';
+      ctx.beginPath();
+      ctx.arc(crankPinX, crankPinY, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Popisky
+      ctx.fillStyle = '#334155';
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillText('HÚ (horní úvrať)', rightX + 6, huY + 4);
+      ctx.fillText('DÚ (dolní úvrať)', rightX + 6, duY + 4);
+
+      ctx.fillStyle = '#ea580c';
+      ctx.fillText('ŠP', leftX - 22, (cylTop + huY) / 2 + 4);
+
+      // 2. INDIKÁTOROVÝ DIAGRAM (Vpravo)
+      const padL = diagX + 44;
+      const padR = w - 24;
+      const padT = h * 0.12;
+      const padB = h * 0.84;
+
+      const plotW = padR - padL;
+      const plotH = padB - padT;
+
+      const V_max_axis = cur.V_max * 1.12;
+      const p_max_axis = state.pk * 1.30;
+
+      function toX(v) {
+        return padL + (v / V_max_axis) * plotW;
+      }
+      function toY(p) {
+        return padB - (p / p_max_axis) * plotH;
+      }
+      diagramTransform = { toX, toY, reachable: params.reachable };
+
+      // Mřížka a číselné dílky tlaku s rozumným krokem.
+      function niceTickStep(maxValue, targetCount = 5) {
+        const raw = maxValue / targetCount;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+        const scaled = raw / magnitude;
+        const nice = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
+        return nice * magnitude;
+      }
+      const pTickStep = niceTickStep(p_max_axis);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      ctx.font = '9px system-ui';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#64748b';
+      for (let p = 0; p <= p_max_axis + pTickStep * 1e-6; p += pTickStep) {
+        const y = toY(p);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padR, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(padL - 4, y);
+        ctx.lineTo(padL, y);
+        ctx.stroke();
+        ctx.fillText(p.toFixed(pTickStep < 1 ? 1 : 0), padL - 7, y + 3);
+      }
+      ctx.textAlign = 'left';
+
+      // Osy
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(padL, padT - 8);
+      ctx.lineTo(padL, padB);
+      ctx.lineTo(padR + 8, padB);
+      ctx.stroke();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 12px system-ui';
+      ctx.fillText('p [bar(a)]', padL - 10, padT - 14);
+      ctx.textAlign = 'center';
+      ctx.fillText('V [cm³]', padL + plotW / 2, padB + 31);
+
+      ctx.strokeStyle = '#334155';
+      ctx.fillStyle = '#64748b';
+      ctx.lineWidth = 1;
+      ctx.font = '9px system-ui';
+      ctx.textAlign = 'center';
+      for (let i = 0; i <= 4; i++) {
+        const volume = cur.V_max * i / 4;
+        const x = toX(volume);
+        ctx.beginPath();
+        ctx.moveTo(x, padB);
+        ctx.lineTo(x, padB + 4);
+        ctx.stroke();
+        ctx.fillText(volume.toFixed(0), x, padB + 15);
+      }
+      ctx.textAlign = 'left';
+
+      // pk a p0 linie
+      const yPk = toY(state.pk);
+      const yP0 = toY(state.p0);
+
+      // pk linie (červená)
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(padL, yPk);
+      ctx.lineTo(padR, yPk);
+      ctx.stroke();
+
+      ctx.fillStyle = '#dc2626';
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillText(`pₖ ${state.pk.toFixed(1)}`, padR - 48, yPk - 4);
+
+      // p0 linie (modrá)
+      ctx.strokeStyle = '#0284c7';
+      ctx.beginPath();
+      ctx.moveTo(padL, yP0);
+      ctx.lineTo(padR, yP0);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#0284c7';
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillText(`p₀ ${state.p0.toFixed(1)}`, padR - 48, yP0 - 4);
+
+      // Škodlivý prostor v diagramu
+      const xSp = toX(params.V_c);
+      ctx.fillStyle = 'rgba(234, 88, 12, 0.12)';
+      ctx.fillRect(padL, padT, xSp - padL, plotH);
+
+      ctx.strokeStyle = '#ea580c';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(xSp, padT);
+      ctx.lineTo(xSp, padB);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ea580c';
+      ctx.fillText('ŠP', (padL + xSp) / 2 - 8, padT + 18);
+
+      if (!params.reachable) {
+        ctx.fillStyle = '#991b1b';
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('Mimo pracovní rozsah modelu', padL + plotW / 2, padT + plotH / 2 - 6);
+        ctx.font = '10px system-ui';
+        ctx.fillText('Píst nedosáhne otevíracího tlaku ventilu.', padL + plotW / 2, padT + plotH / 2 + 12);
+        ctx.textAlign = 'left';
+        return;
+      }
+
+      // GENERACE KŘIVKY: 4 PO SOBĚ JDOUCÍ FÁZE (uzavřená smyčka proti směru hodinových ručiček)
+      const ptsA = []; // 1. fáze (Expanze ze ŠP: V_c -> V_exp_end)
+      const ptsB = []; // 2. fáze (Sání: V_exp_end -> V_max)
+      const ptsC = []; // 3. fáze (Komprese: V_max -> V_comp_end)
+      const ptsD = []; // 4. fáze (Výtlak: V_comp_end -> V_c)
+
+      // 1. FÁZE: Expanze
+      const nStepsA = 40;
+      for (let i = 0; i <= nStepsA; i++) {
+        const v = params.V_c + (i / nStepsA) * (params.V_exp_end - params.V_c);
+        ptsA.push({ x: toX(v), y: toY(evalPhase1(v, params)) });
+      }
+
+      // 2. FÁZE: Sání
+      const nStepsB = 60;
+      for (let i = 0; i <= nStepsB; i++) {
+        const v = params.V_exp_end + (i / nStepsB) * (params.V_max - params.V_exp_end);
+        ptsB.push({ x: toX(v), y: toY(evalPhase2(v, params)) });
+      }
+
+      // 3. FÁZE: Komprese
+      const nStepsC = 60;
+      for (let i = 0; i <= nStepsC; i++) {
+        const v = params.V_max - (i / nStepsC) * (params.V_max - params.V_comp_end);
+        ptsC.push({ x: toX(v), y: toY(evalPhase3(v, params)) });
+      }
+
+      // 4. FÁZE: Výtlak
+      const nStepsD = 40;
+      for (let i = 0; i <= nStepsD; i++) {
+        const v = params.V_comp_end - (i / nStepsD) * (params.V_comp_end - params.V_c);
+        ptsD.push({ x: toX(v), y: toY(evalPhase4(v, params)) });
+      }
+
+      // Výplň indikované práce (W_i)
+      ctx.fillStyle = 'rgba(2, 132, 199, 0.08)';
+      ctx.beginPath();
+      ctx.moveTo(ptsA[0].x, ptsA[0].y);
+      for (const pt of ptsA) ctx.lineTo(pt.x, pt.y);
+      for (const pt of ptsB) ctx.lineTo(pt.x, pt.y);
+      for (const pt of ptsC) ctx.lineTo(pt.x, pt.y);
+      for (const pt of ptsD) ctx.lineTo(pt.x, pt.y);
+      ctx.closePath();
+      ctx.fill();
+
+      // Vykreslení jednotlivých fází v přesných barvách
+      function drawSegment(pts, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
+
+      drawSegment(ptsA, '#d97706'); // 1. Expanze (Oranžová)
+      drawSegment(ptsB, '#0284c7'); // 2. Sání (Modrá)
+      drawSegment(ptsC, '#7c3aed'); // 3. Komprese (Fialová)
+      drawSegment(ptsD, '#dc2626'); // 4. Výtlak (Červená)
+
+      // Písmena fází A, B, C, D
+      ctx.font = 'bold 13px system-ui';
+      // A (střed expanze)
+      const midA = ptsA[Math.floor(ptsA.length * 0.45)];
+      ctx.fillStyle = '#d97706';
+      ctx.fillText('A', midA.x - 16, midA.y);
+
+      // B (střed sání)
+      const midB = ptsB[Math.floor(ptsB.length * 0.5)];
+      ctx.fillStyle = '#0284c7';
+      ctx.fillText('B', midB.x, midB.y + 16);
+
+      // C (střed komprese)
+      const midC = ptsC[Math.floor(ptsC.length * 0.5)];
+      ctx.fillStyle = '#7c3aed';
+      ctx.fillText('C', midC.x + 10, midC.y);
+
+      // D (střed výtlaku)
+      const midD = ptsD[Math.floor(ptsD.length * 0.5)];
+      ctx.fillStyle = '#dc2626';
+      ctx.fillText('D', midD.x, midD.y - 12);
+
+      // Bod okamžitého stavu chladiva
+      const curPtX = toX(cur.V_current);
+      const curPtY = toY(cur.pressure);
+
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(curPtX, curPtY);
+      ctx.lineTo(curPtX, padB);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 3. SPOJOVACÍ PŘÍMKA
+      const pistonOriginX = rightX;
+      const pistonOriginY = pistonY;
+      const phaseColors = {
+        'A': '#d97706',
+        'B': '#0284c7',
+        'C': '#7c3aed',
+        'D': '#dc2626'
+      };
+      const activeColor = phaseColors[cur.phase];
+
+      ctx.strokeStyle = activeColor;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pistonOriginX, pistonOriginY);
+      ctx.lineTo(curPtX, curPtY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = activeColor;
+      ctx.beginPath();
+      ctx.arc(pistonOriginX, pistonOriginY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Štítek na přímce
+      const midX = (pistonOriginX + curPtX) / 2;
+      const midY = (pistonOriginY + curPtY) / 2;
+
+      const phaseNames = {
+        'A': 'Fáze A: Expanze',
+        'B': 'Fáze B: Sání',
+        'C': 'Fáze C: Komprese',
+        'D': 'Fáze D: Výtlak'
+      };
+
+      const labelText = phaseNames[cur.phase];
+      ctx.font = 'bold 11px system-ui';
+      const textW = ctx.measureText(labelText).width;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = activeColor;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(midX - textW / 2 - 8, midY - 11, textW + 16, 22, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = activeColor;
+      ctx.fillText(labelText, midX - textW / 2, midY + 4);
+
+      // Bod na diagramu
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = activeColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(curPtX, curPtY, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Přímé ovládání úhlu kliky tažením bílého bodu po indikátorové křivce.
+    function getCanvasPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+
+    function findNearestCycleAngle(point) {
+      if (!diagramTransform?.reachable) return null;
+      let nearestAngle = state.angle;
+      let nearestDistance = Infinity;
+      for (let offset = -12; offset <= 12; offset += 0.25) {
+        const angle = (state.angle + offset + 360) % 360;
+        // Omezíme hledání na bezprostřední okolí aktuálního úhlu, aby
+        // překřížení či blízké větve smyčky nemohly způsobit skok na jinou fázi.
+        const cycle = getCycleState(angle);
+        if (!Number.isFinite(cycle.pressure)) continue;
+        const dx = diagramTransform.toX(cycle.V_current) - point.x;
+        const dy = diagramTransform.toY(cycle.pressure) - point.y;
+        const distance = dx * dx + dy * dy;
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestAngle = angle;
+        }
+      }
+      return { angle: nearestAngle, distance: Math.sqrt(nearestDistance) };
+    }
+
+    function moveDiagramPoint(event) {
+      if (!dragTargetPoint) return;
+      const pointer = getCanvasPoint(event);
+      // Zachováme počáteční místo uchopení bodu a posouváme jej o stejný
+      // přírůstek jako kurzor, stejně jako při tažení jezdce posuvníku.
+      if (!dragLastPointer) dragLastPointer = pointer;
+      dragTargetPoint.x += pointer.x - dragLastPointer.x;
+      dragTargetPoint.y += pointer.y - dragLastPointer.y;
+      dragLastPointer = pointer;
+      const nearest = findNearestCycleAngle(dragTargetPoint);
+      if (!nearest) return;
+      state.angle = nearest.angle;
+      sliderAngle.value = Math.round(state.angle);
+      badgeAngle.textContent = Math.round(state.angle) + '°';
+      render();
+      updateUI();
+    }
+
+    function moveCrankPin(event) {
+      if (!crankControl) return;
+      const point = getCanvasPoint(event);
+      const dx = point.x - crankControl.cx;
+      const dy = crankControl.crankY - point.y;
+      state.angle = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+      sliderAngle.value = Math.round(state.angle) % 360;
+      badgeAngle.textContent = Math.round(state.angle) % 360 + '°';
+      render();
+      updateUI();
+    }
+
+    canvas.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      const point = getCanvasPoint(event);
+      if (crankControl) {
+        const crankDx = point.x - crankControl.x;
+        const crankDy = point.y - crankControl.y;
+        if (crankDx * crankDx + crankDy * crankDy <= 14 * 14) {
+          draggingCrankPin = true;
+          canvas.style.cursor = 'grabbing';
+          state.running = false;
+          updateToggleButton();
+          canvas.setPointerCapture(event.pointerId);
+          moveCrankPin(event);
+          event.preventDefault();
+          return;
+        }
+      }
+      const current = getCycleState(state.angle);
+      if (!diagramTransform?.reachable || !Number.isFinite(current.pressure)) return;
+      const dx = diagramTransform.toX(current.V_current) - point.x;
+      const dy = diagramTransform.toY(current.pressure) - point.y;
+      if (dx * dx + dy * dy > 14 * 14) return;
+
+      draggingDiagramPoint = true;
+      dragLastPointer = point;
+      dragTargetPoint = {
+        x: diagramTransform.toX(current.V_current),
+        y: diagramTransform.toY(current.pressure)
+      };
+      canvas.style.cursor = 'grabbing';
+      state.running = false;
+      updateToggleButton();
+      canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+
+    canvas.addEventListener('pointermove', (event) => {
+      if (draggingCrankPin) {
+        canvas.style.cursor = 'grabbing';
+        moveCrankPin(event);
+        return;
+      }
+      if (draggingDiagramPoint) {
+        canvas.style.cursor = 'grabbing';
+        moveDiagramPoint(event);
+        return;
+      }
+      const point = getCanvasPoint(event);
+      if (crankControl) {
+        const crankDx = crankControl.x - point.x;
+        const crankDy = crankControl.y - point.y;
+        if (crankDx * crankDx + crankDy * crankDy <= 14 * 14) {
+          canvas.style.cursor = 'grab';
+          return;
+        }
+      }
+      const current = getCycleState(state.angle);
+      const dx = diagramTransform?.toX(current.V_current) - point.x;
+      const dy = diagramTransform?.toY(current.pressure) - point.y;
+      canvas.style.cursor = diagramTransform?.reachable && Number.isFinite(current.pressure)
+        && dx * dx + dy * dy <= 14 * 14 ? 'grab' : 'default';
+    });
+
+    function stopDiagramDrag() {
+      if (!draggingDiagramPoint) return;
+      draggingDiagramPoint = false;
+      dragLastPointer = null;
+      dragTargetPoint = null;
+      canvas.style.cursor = 'grab';
+    }
+    function stopCrankDrag() {
+      if (!draggingCrankPin) return;
+      draggingCrankPin = false;
+      canvas.style.cursor = 'grab';
+    }
+    canvas.addEventListener('pointerup', stopDiagramDrag);
+    canvas.addEventListener('pointerup', stopCrankDrag);
+    canvas.addEventListener('pointercancel', stopDiagramDrag);
+    canvas.addEventListener('pointercancel', stopCrankDrag);
+    canvas.addEventListener('lostpointercapture', stopDiagramDrag);
+    canvas.addEventListener('lostpointercapture', stopCrankDrag);
+
+    function updateUI() {
+      const cur = getCycleState(state.angle);
+      const metrics = computeMetrics();
+
+      valP.textContent = Number.isFinite(cur.pressure) ? cur.pressure.toFixed(2) : '—';
+      valV.textContent = cur.V_current.toFixed(1);
+      valLambda.textContent = metrics.lambda_v === null ? '—' : metrics.lambda_v.toFixed(1);
+      valPi.textContent = metrics.Pi.toFixed(2);
+      valWork.textContent = metrics.workJ === null ? '—' : metrics.workJ.toFixed(1);
+
+      badgeAngle.textContent = Math.round(state.angle) + '°';
+      sliderAngle.value = Math.round(state.angle);
+
+      const phases = {
+        'X': { title: 'Mimo pracovní rozsah', desc: 'Při tomto tlakovém poměru a škodlivém prostoru píst nedosáhne otevíracího tlaku některého ventilu. Cyklus nelze tímto zjednodušeným modelem zobrazit.', color: '#991b1b' },
+        'A': {
+          title: 'Fáze A: Expanze ze ŠP',
+          desc: 'Píst klesá z HÚ. Zbytkové chladivo expanduje pod p₀ k překonání pružiny ventilu. Ventily jsou zavřené.',
+          color: '#d97706'
+        },
+        'B': {
+          title: 'Fáze B: Sání chladiva',
+          desc: 'Sací ventil odskočil a je otevřen (proudění ↓). Píst nasává chladivo při tlaku p ≤ p₀ až do DÚ.',
+          color: '#0284c7'
+        },
+        'C': {
+          title: 'Fáze C: Komprese',
+          desc: 'Píst stoupá z DÚ, ventily jsou zavřené, stlačováním stoupá tlak nad pk k překonání výtlačného ventilu.',
+          color: '#7c3aed'
+        },
+        'D': {
+          title: 'Fáze D: Výtlak chladiva',
+          desc: 'Výtlačný ventil je otevřen (proudění ↑). Stlačené páry proudí při tlaku p ≥ pk do kondenzátoru.',
+          color: '#dc2626'
+        }
+      };
+
+      const p = phases[cur.phase];
+      phaseTitle.textContent = p.title;
+      phaseTitle.style.color = p.color;
+      phaseDesc.textContent = p.desc;
+      phaseBadge.style.background = p.color;
+
+      if (cur.suctionOpen) {
+        tagSuction.classList.add('open');
+        statusSuction.textContent = 'Otevřen (proudění ↓)';
+      } else {
+        tagSuction.classList.remove('open');
+        statusSuction.textContent = 'Zavřen';
+      }
+
+      if (cur.dischargeOpen) {
+        tagDischarge.classList.add('open');
+        statusDischarge.textContent = 'Otevřen (proudění ↑)';
+      } else {
+        tagDischarge.classList.remove('open');
+        statusDischarge.textContent = 'Zavřen';
+      }
+    }
+
+    // Animation Loop
+    function loop(timestamp) {
+      if (!state.lastTimestamp) state.lastTimestamp = timestamp;
+      const dt = (timestamp - state.lastTimestamp) / 1000;
+      state.lastTimestamp = timestamp;
+
+      if (state.running) {
+        const dAngle = (state.rpm * 6) * dt;
+        state.angle = (state.angle + dAngle) % 360;
+      }
+
+      render();
+      updateUI();
+
+      requestAnimationFrame(loop);
+    }
+
+    // Sjednocené tlačítko Start / Stop
+    btnToggle.addEventListener('click', () => {
+      state.running = !state.running;
+      updateToggleButton();
+    });
+
+    // Reset simulace
+    btnResetAll.addEventListener('click', () => {
+      state.running = false;
+      state.angle = 0;
+      state.p0 = 2.0;
+      state.pk = 12.0;
+      state.sp_pct = 5.0;
+      state.vz = 150;
+      state.rpm = 15;
+      state.n = 1.25;
+      state.diagramMode = 'real';
+      sliderN.value = 1.25; badgeN.textContent = '1.25';
+      selectDiagram.value = 'real';
+
+      sliderP0.value = 2.0;
+      badgeP0.textContent = '2.0 bar(a)';
+
+      sliderPk.value = 12.0;
+      badgePk.textContent = '12.0 bar(a)';
+
+      sliderSp.value = 5.0;
+      badgeSp.textContent = '5.0 %';
+
+      sliderVz.value = 150;
+      badgeVz.textContent = '150 cm³';
+
+      sliderRpm.value = 15;
+      badgeRpm.textContent = '15 RPM';
+
+      sliderAngle.value = 0;
+      badgeAngle.textContent = '0°';
+
+      updateToggleButton();
+      render();
+      updateUI();
+    });
+
+    // Plynulý posuvník rychlosti
+    sliderN.addEventListener('input', (e) => { state.n = parseFloat(e.target.value); badgeN.textContent = state.n.toFixed(2); });
+    selectDiagram.addEventListener('change', (e) => { state.diagramMode = e.target.value; });
+
+    sliderRpm.addEventListener('input', (e) => {
+      state.rpm = parseFloat(e.target.value);
+      badgeRpm.textContent = state.rpm + ' RPM';
+    });
+
+    sliderAngle.addEventListener('input', (e) => {
+      state.angle = parseFloat(e.target.value) % 360;
+      state.running = false;
+      updateToggleButton();
+    });
+
+    sliderP0.addEventListener('input', (e) => {
+      state.p0 = parseFloat(e.target.value);
+      badgeP0.textContent = state.p0.toFixed(1) + ' bar(a)';
+      if (state.p0 >= state.pk) {
+        state.pk = state.p0 + 1.0;
+        sliderPk.value = state.pk;
+        badgePk.textContent = state.pk.toFixed(1) + ' bar(a)';
+      }
+    });
+
+    sliderPk.addEventListener('input', (e) => {
+      state.pk = parseFloat(e.target.value);
+      badgePk.textContent = state.pk.toFixed(1) + ' bar(a)';
+      if (state.pk <= state.p0) {
+        state.p0 = Math.max(0.8, state.pk - 1.0);
+        sliderP0.value = state.p0;
+        badgeP0.textContent = state.p0.toFixed(1) + ' bar(a)';
+      }
+    });
+
+    sliderSp.addEventListener('input', (e) => {
+      state.sp_pct = parseFloat(e.target.value);
+      badgeSp.textContent = state.sp_pct.toFixed(1) + ' %';
+    });
+
+    sliderVz.addEventListener('input', (e) => {
+      state.vz = parseFloat(e.target.value);
+      badgeVz.textContent = state.vz + ' cm³';
+    });
+
+    window.addEventListener('resize', render);
+
+    // Initial render
+    updateToggleButton();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
